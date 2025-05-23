@@ -7,9 +7,16 @@ import SplitMethodSelector from "./SplitMethodSelector";
 const ExpenseForm = ({ formData, onChange, categories, group, expenseType, currentUser, availableFriends }) => {
   const [showNotes, setShowNotes] = useState(false);
   const [multiplePayersMode, setMultiplePayersMode] = useState(false);
-  console.log(formData);
+  
+  // Initialize multiplePayersMode based on existing formData
   useEffect(() => {
-    // This effect ONLY runs if multiplePayersMode or expenseType changes.
+    // If we already have multiple payers in formData, set mode automatically
+    if (formData.participants && formData.participants.filter(p => p && p.isPayer).length > 1) {
+      setMultiplePayersMode(true);
+    }
+  }, []);
+  useEffect(() => {
+    // This effect runs when switching between multiple and single payer modes
     // It aims to sanitize participant state for the new mode.
     if (expenseType === 'group') {
         if (!multiplePayersMode) { // Switched TO Single Payer Mode
@@ -29,9 +36,8 @@ const ExpenseForm = ({ formData, onChange, categories, group, expenseType, curre
                 onChange("participants", clearedParticipants);
             }
         }
-        // When switching TO multiplePayersMode, no immediate change to participants is forced by this useEffect.
     }
-}, [multiplePayersMode, expenseType, onChange]); // formData.participants removed from deps to prevent loops
+}, [multiplePayersMode, expenseType, onChange, formData.participants]);
 
   const handleParticipantToggle = (participantUserId) => {
     onChange(
@@ -49,19 +55,45 @@ const ExpenseForm = ({ formData, onChange, categories, group, expenseType, curre
     let updatedParticipants;
 
     if (multiplePayersMode) {
+      // In multiple payer mode, toggle the isPayer status for the selected participant
+      // If they become a payer, distribute the amount evenly among current payers
+      const participantToToggle = formData.participants.find(p => p.user && p.user._id === payerId);
+      const willBePayer = participantToToggle ? !participantToToggle.isPayer : false;
+      
+      // Count how many payers we would have after the toggle
+      const currentPayers = formData.participants.filter(p => p.isPayer && p.user && p.user._id !== payerId);
+      const payerCount = willBePayer ? currentPayers.length + 1 : currentPayers.length;
+      
+      // Calculate a fair split of the amount among payers if we're adding a new payer
+      let defaultAmount = 0;
+      if (willBePayer && payerCount > 0) {
+        defaultAmount = Math.round((currentAmount / payerCount) * 100) / 100;
+      }
+      
+      // If toggling off the last payer, prevent that to avoid having no payers
+      if (!willBePayer && currentPayers.length === 0) {
+        // Don't allow removing the last payer
+        return;
+      }
+      
       updatedParticipants = formData.participants.map(p => {
         if (p.user && p.user._id === payerId) {
-          const willBePayer = !p.isPayer;
           return {
             ...p,
             isPayer: willBePayer,
-            paidAmount: willBePayer ? currentAmount : 0 // Or some other logic for multi-payer default
+            paidAmount: willBePayer ? defaultAmount : 0
+          };
+        } else if (willBePayer && p.isPayer) {
+          // Redistribute amounts among existing payers
+          return {
+            ...p,
+            paidAmount: defaultAmount
           };
         }
         return p;
       });
     } else {
-      // Single payer mode
+      // Single payer mode - only one person can be the payer
       updatedParticipants = formData.participants.map(p => {
         const isSelectedPayer = p.user && p.user._id === payerId;
         return {
@@ -72,13 +104,15 @@ const ExpenseForm = ({ formData, onChange, categories, group, expenseType, curre
       });
     }
     onChange("participants", updatedParticipants);
-    // NO onChange("paidBy", ...) call
   };
 
   const handlePayerAmountChange = (payerUserId, amountStr) => {
     if (!payerUserId) return;
 
     const amount = parseFloat(amountStr) || 0;
+    const totalExpenseAmount = parseFloat(formData.amount) || 0;
+    
+    // Update the paidAmount for the selected payer
     const updatedParticipants = formData.participants.map(p => {
       if (p.user && p.user._id === payerUserId) {
         return { ...p, paidAmount: amount };
@@ -86,8 +120,26 @@ const ExpenseForm = ({ formData, onChange, categories, group, expenseType, curre
       return p;
     });
 
+    // Check if we need to adjust other payers' amounts in multi-payer mode
+    if (multiplePayersMode) {
+      const currentPayers = updatedParticipants.filter(p => p.isPayer && p.user && p.user._id !== payerUserId);
+      const currentTotal = amount + currentPayers.reduce((sum, p) => sum + (p.paidAmount || 0), 0);
+      
+      // If total is more than expense amount, adjust other payers' amounts
+      if (currentTotal > totalExpenseAmount && currentPayers.length > 0) {
+        const remainingAmount = Math.max(0, totalExpenseAmount - amount);
+        const avgRemainingPerPayer = remainingAmount / currentPayers.length;
+        
+        // Distribute remaining amount among other payers
+        updatedParticipants.forEach(p => {
+          if (p.isPayer && p.user && p.user._id !== payerUserId) {
+            p.paidAmount = Math.max(0, avgRemainingPerPayer);
+          }
+        });
+      }
+    }
+
     onChange("participants", updatedParticipants);
-    // NO onChange("paidBy", ...) call
   };
 
   const selectedCategory = categories.find(c => c.id === formData.category);
@@ -101,13 +153,31 @@ const ExpenseForm = ({ formData, onChange, categories, group, expenseType, curre
   // Calculate total paid amount in multiple payers mode
   const totalPaidInMultipleMode = formData.participants
     .filter(p => p.isPayer)
-    .reduce((sum, p) => sum + (p.paidAmount || 0), 0);
+    .reduce((sum, p) => sum + (parseFloat(p.paidAmount) || 0), 0);
 
   // Check if total matches expense amount (with small tolerance for floating point)
   const expenseAmount = parseFloat(formData.amount) || 0;
   const isTotalMismatch = multiplePayersMode && expenseAmount > 0 && 
     Math.abs(totalPaidInMultipleMode - expenseAmount) > 0.01;
+  
+  // Determine if we have any payers selected
+  const hasPayers = formData.participants.some(p => p.isPayer);
+  
+  // Debugging info
+  useEffect(() => {
+    // Debug the paidBy state whenever it changes
+    if (formData.paidBy && formData.paidBy.length > 0) {
+      console.log("Current paidBy state:", formData.paidBy);
+    } else if (hasPayers) {
+      console.log("Has payers but no paidBy:", 
+                  formData.participants.filter(p => p.isPayer).map(p => p.user ? p.user._id : null));
+    }
+  }, [formData.paidBy, hasPayers, formData.participants]);
 
+  // Validate state of payers for debugging payers=null issue
+  const payersPresent = formData.participants.filter(p => p.isPayer).length > 0;
+  const paidByPresent = formData.paidBy && formData.paidBy.length > 0;
+  
   return (
     <form className="mt-6 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -233,7 +303,23 @@ const ExpenseForm = ({ formData, onChange, categories, group, expenseType, curre
             {formData.participants.length > 1 && (
               <button
                 type="button"
-                onClick={() => setMultiplePayersMode(!multiplePayersMode)}
+                onClick={() => {
+                  // When toggling to single payer mode, ensure at least one payer remains selected
+                  if (multiplePayersMode) {
+                    const payers = formData.participants.filter(p => p.isPayer && p.user);
+                    if (payers.length > 1) {
+                      // Keep only the first payer when switching to single payer mode
+                      const newParticipants = formData.participants.map(p => ({
+                        ...p, 
+                        isPayer: p.user && p.user._id === payers[0].user._id,
+                        paidAmount: p.user && p.user._id === payers[0].user._id ? 
+                          parseFloat(formData.amount) || 0 : 0
+                      }));
+                      onChange("participants", newParticipants);
+                    }
+                  }
+                  setMultiplePayersMode(!multiplePayersMode);
+                }}
                 className="text-mint-500 text-sm font-medium hover:text-mint-700 flex items-center"
               >
                 {multiplePayersMode ? "Single Payer" : "Multiple Payers"}
@@ -358,9 +444,18 @@ const ExpenseForm = ({ formData, onChange, categories, group, expenseType, curre
                   ${totalPaidInMultipleMode.toFixed(2)}
                 </span>
               </div>
+
+              {hasPayers && (
+                <div className="flex justify-between pt-1">
+                  <span className="text-sm text-gray-500">Amount left to allocate</span>
+                  <span className={`text-sm font-medium ${isTotalMismatch ? "text-error" : "text-gray-500"}`}>
+                    ${Math.abs(expenseAmount - totalPaidInMultipleMode).toFixed(2)}
+                  </span>
+                </div>
+              )}
               
               {isTotalMismatch && (
-                <div className="text-xs text-error">
+                <div className="text-xs text-error mt-1">
                   Total paid amount (${totalPaidInMultipleMode.toFixed(2)}) must equal the expense amount (${parseFloat(formData.amount).toFixed(2) || '0.00'})
                 </div>
               )}

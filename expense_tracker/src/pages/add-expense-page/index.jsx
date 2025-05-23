@@ -24,7 +24,7 @@ const AddExpensePage = () => {
     currency: "USD",
     category: "",
     date: new Date(),
-    paidBy: null,
+    paidBy: [], // Initialize as empty array rather than null
     splitMethod: "equal",
     participants: [],
     notes: "",
@@ -87,7 +87,7 @@ const AddExpensePage = () => {
     setFormData(prev => ({
       ...prev,
       participants: [],
-      paidBy: null, // No default payer for any expense type
+      paidBy: [], // Initialize as empty array rather than null
       splitMethod: "equal",
     }));
     
@@ -108,7 +108,8 @@ const AddExpensePage = () => {
           isIncluded: true,      // User is included by default
           isPayer: false,        // User is NOT automatically set as payer
           paidAmount: 0,
-          share: 0
+          share: 0,
+          percentShare: 0
         }
       ];
       
@@ -128,7 +129,8 @@ const AddExpensePage = () => {
             isIncluded: false,
             isPayer: false,
             paidAmount: 0,
-            share: 0
+            share: 0,
+            percentShare: 0
           });
         });
       }
@@ -164,13 +166,19 @@ const AddExpensePage = () => {
         isPayer: false,          // No one is set as payer by default
         paidAmount: 0,
         share: 0,
+        percentShare: 0
       };
     }) : [];
+
+    // Create a default paidBy array with empty content
+    // This ensures we always have the paidBy field initialized as an array
+    // It will get populated when a payer is selected
+    const initialPaidBy = []; 
 
     setFormData(prevFormData => ({
       ...prevFormData,
       participants: initialParticipants,
-      paidBy: null,  // No default payer
+      paidBy: initialPaidBy,
       splitMethod: "equal",
     }));
   };
@@ -184,21 +192,70 @@ const AddExpensePage = () => {
         const payers = updatedParticipants.filter(p => p.isPayer && p.user);
         
         if (payers.length === 1) {
+          // Single payer - update paidBy to match
           const singlePayer = payers[0];
-          newFormData.paidBy = [{ user: singlePayer.user._id, amount: singlePayer.paidAmount || parseFloat(prevFormData.amount) || 0 }];
+          newFormData.paidBy = [{ 
+            user: singlePayer.user._id, 
+            amount: singlePayer.paidAmount || parseFloat(prevFormData.amount) || 0 
+          }];
+        } else if (payers.length > 1) {
+          // Multiple payers - create paidBy array with each payer
+          newFormData.paidBy = payers.map(p => ({
+            user: p.user._id,
+            amount: p.paidAmount || 0
+          }));
         } else {
-          newFormData.paidBy = null; // Multiple payers or no payer selected
+          newFormData.paidBy = null; // No payers selected
         }
+        
         // Ensure participant amounts are consistent if total amount changes
         if (prevFormData.amount !== newFormData.amount && payers.length === 1) {
-            const singlePayer = payers[0];
-            newFormData.participants = updatedParticipants.map(p => {
-                if (p.user._id === singlePayer.user._id) {
-                    return {...p, paidAmount: parseFloat(newFormData.amount) || 0};
+          const singlePayer = payers[0];
+          newFormData.participants = updatedParticipants.map(p => {
+            if (p.user._id === singlePayer.user._id) {
+              return {...p, paidAmount: parseFloat(newFormData.amount) || 0};
+            }
+            return p;
+          });
+          newFormData.paidBy = [{ 
+            user: singlePayer.user._id, 
+            amount: parseFloat(newFormData.amount) || 0 
+          }];
+        } else if (prevFormData.amount !== newFormData.amount && payers.length > 1) {
+          // For multiple payers, update their amounts proportionally
+          const totalPaid = payers.reduce((sum, p) => sum + (parseFloat(p.paidAmount) || 0), 0);
+          const newAmount = parseFloat(newFormData.amount) || 0;
+          
+          if (totalPaid > 0) {
+            // Update proportionally
+            let updatedTotal = 0;
+            newFormData.participants = updatedParticipants.map((p, index) => {
+              if (p.isPayer && p.user) {
+                const ratio = (parseFloat(p.paidAmount) || 0) / totalPaid;
+                let newPayerAmount;
+                
+                if (index === payers.length - 1) {
+                  // Last payer gets remaining amount to ensure total matches exactly
+                  newPayerAmount = Math.round((newAmount - updatedTotal) * 100) / 100;
+                } else {
+                  newPayerAmount = Math.round(newAmount * ratio * 100) / 100;
+                  updatedTotal += newPayerAmount;
                 }
-                return p;
+                
+                return {...p, paidAmount: newPayerAmount};
+              }
+              return p;
             });
-            newFormData.paidBy = [{ user: singlePayer.user._id, amount: parseFloat(newFormData.amount) || 0 }];
+            
+            // Update paidBy with new amounts
+            newFormData.paidBy = payers.map((p, idx) => {
+              const updatedP = newFormData.participants.find(up => up.user._id === p.user._id);
+              return {
+                user: p.user._id,
+                amount: updatedP ? updatedP.paidAmount : 0
+              };
+            });
+          }
         }
 
       } else if (field === "amount") {
@@ -207,6 +264,7 @@ const AddExpensePage = () => {
         const payers = Array.isArray(currentParticipants) ? currentParticipants.filter(p => p.isPayer && p.user) : [];
 
         if (payers.length === 1) {
+          // Single payer - assign full amount to them
           const singlePayer = payers[0];
           newFormData.paidBy = [{ user: singlePayer.user._id, amount: newAmount }];
           newFormData.participants = currentParticipants.map(p => {
@@ -215,9 +273,59 @@ const AddExpensePage = () => {
             }
             return p;
           });
+        } else if (payers.length > 1) {
+          // Multiple payers - distribute amount proportionally
+          const totalCurrentlyPaid = payers.reduce((sum, p) => sum + (parseFloat(p.paidAmount) || 0), 0);
+          
+          if (totalCurrentlyPaid > 0) {
+            // Distribute proportionally based on current shares
+            newFormData.participants = currentParticipants.map(p => {
+              if (p.isPayer && p.user) {
+                const ratio = (parseFloat(p.paidAmount) || 0) / totalCurrentlyPaid;
+                return { ...p, paidAmount: Math.round(newAmount * ratio * 100) / 100 };
+              }
+              return p;
+            });
+            
+            // Update paidBy array for multiple payers
+            newFormData.paidBy = payers.map(payer => {
+              const updatedPayer = newFormData.participants.find(p => p.user._id === payer.user._id);
+              return { 
+                user: payer.user._id, 
+                amount: updatedPayer ? updatedPayer.paidAmount : 0 
+              };
+            });
+          } else {
+            // Equal distribution if no amounts set previously
+            const equalShare = Math.round((newAmount / payers.length) * 100) / 100;
+            
+            // Calculate the total first to handle rounding errors
+            let totalAllocated = 0;
+            newFormData.participants = currentParticipants.map((p, index) => {
+              if (p.isPayer && p.user) {
+                let payerAmount = equalShare;
+                if (index === payers.length - 1) {
+                  // Last payer gets remaining amount to account for rounding
+                  payerAmount = Math.round((newAmount - totalAllocated) * 100) / 100;
+                } else {
+                  totalAllocated += equalShare;
+                }
+                return { ...p, paidAmount: payerAmount };
+              }
+              return p;
+            });
+            
+            // Update paidBy array
+            newFormData.paidBy = payers.map(payer => {
+              const updatedPayer = newFormData.participants.find(p => p.user._id === payer.user._id);
+              return { 
+                user: payer.user._id, 
+                amount: updatedPayer ? updatedPayer.paidAmount : 0 
+              };
+            });
+          }
         } else {
-          // If multiple payers or no payer, don't auto-change individual paidAmounts
-          // but ensure paidBy is null if amount becomes 0 or invalid.
+          // No payers - clear paidBy if amount is zero or invalid
           if (newAmount <= 0) {
             newFormData.paidBy = null;
           }
@@ -267,26 +375,113 @@ const AddExpensePage = () => {
     let paidByPayload = [];
     
     // Handle payers from participants with isPayer flag
-    const payers = formData.participants.filter(p => p.isPayer && p.user && parseFloat(p.paidAmount) > 0);
+    const payers = formData.participants.filter(p => p.isPayer && p.user);
+    console.log("Processing payers:", payers);
 
     if (payers.length > 0) {
-      paidByPayload = payers.map(p => ({ 
-        user: p.user._id, 
-        amount: parseFloat(p.paidAmount) || 0 
-      }));
-    } else if (formData.paidBy && formData.paidBy[0]) {
+      // Process and normalize payer amounts
+      const totalPaidAmount = payers.reduce((sum, p) => sum + (parseFloat(p.paidAmount) || 0), 0);
+      console.log("Total paid amount:", totalPaidAmount, "Expense amount:", totalExpenseAmount);
+      
+      if (totalPaidAmount === 0) {
+        // No amounts were specified - distribute equally
+        const equalShare = Math.round((totalExpenseAmount / payers.length) * 100) / 100;
+        let allocated = 0;
+        
+        paidByPayload = payers.map((p, index) => {
+          let amount;
+          if (index === payers.length - 1) {
+            // Last payer gets remaining amount to ensure total is exact
+            amount = Math.round((totalExpenseAmount - allocated) * 100) / 100;
+          } else {
+            amount = equalShare;
+            allocated += equalShare;
+          }
+          
+          return {
+            user: p.user._id,
+            amount: amount
+          };
+        });
+      } else if (Math.abs(totalPaidAmount - totalExpenseAmount) > 0.01) {
+        // Paid amount doesn't match total - normalize proportionally
+        let allocated = 0;
+        
+        paidByPayload = payers.map((p, index) => {
+          let amount;
+          if (index === payers.length - 1) {
+            // Last payer gets any remaining amount
+            amount = Math.round((totalExpenseAmount - allocated) * 100) / 100;
+          } else {
+            // Scale amount proportionally
+            const ratio = (parseFloat(p.paidAmount) || 0) / totalPaidAmount;
+            amount = Math.round(totalExpenseAmount * ratio * 100) / 100;
+            allocated += amount;
+          }
+          
+          return {
+            user: p.user._id,
+            amount: amount
+          };
+        });
+      } else {
+        // Paid amount matches total - use as is with proper parsing
+        paidByPayload = payers.map(p => ({ 
+          user: p.user._id, 
+          amount: parseFloat(p.paidAmount) || 0 
+        }));
+      }
+      console.log("Final paidByPayload:", paidByPayload);
+    } else if (formData.paidBy && formData.paidBy.length > 0) {
+      console.log("Using existing paidBy:", formData.paidBy);
       // Use existing paidBy if available
-      paidByPayload = [{ 
-        user: formData.paidBy[0].user, 
-        amount: totalExpenseAmount 
-      }];
-    } else {
-      // No payer selected - show clear error message
-      alert("Please select who paid for the expense by clicking on a person in the 'Who Paid?' section.");
-      return;
-    }
+      if (formData.paidBy.length === 1) {
+        paidByPayload = [{ 
+          user: formData.paidBy[0].user, 
+          amount: totalExpenseAmount 
+        }];
+      } else {
+        // Make sure to create a new array with properly formatted objects
+        paidByPayload = formData.paidBy.map(payer => ({
+          user: payer.user,
+          amount: parseFloat(payer.amount) || 0
+        }));
+      }
+      console.log("Final paidByPayload from formData.paidBy:", paidByPayload);        } else {
+          // Check if participants has isPayer data we can use as fallback
+          const participantPayers = formData.participants.filter(p => p.isPayer && p.user);
+          if (participantPayers.length > 0) {
+            // Use participant payer data to recreate paidByPayload
+            paidByPayload = participantPayers.map(p => ({
+              user: p.user._id,
+              amount: parseFloat(p.paidAmount) || 0
+            }));
+            
+            // Normalize the amounts to ensure they add up to total
+            const totalAmount = paidByPayload.reduce((sum, p) => sum + p.amount, 0);
+            if (Math.abs(totalAmount - totalExpenseAmount) > 0.01) {
+              let allocated = 0;
+              paidByPayload = paidByPayload.map((p, i) => {
+                if (i === paidByPayload.length - 1) {
+                  return { ...p, amount: Math.round((totalExpenseAmount - allocated) * 100) / 100 };
+                } else {
+                  const ratio = p.amount / totalAmount;
+                  const newAmount = Math.round(totalExpenseAmount * ratio * 100) / 100;
+                  allocated += newAmount;
+                  return { ...p, amount: newAmount };
+                }
+              });
+            }
+            console.log("Recreated paidByPayload from participants:", paidByPayload);
+          } else {
+            // No payer selected - show clear error message
+            alert("Please select who paid for the expense by clicking on a person in the 'Who Paid?' section.");
+            return;
+          }
+        }
 
-    const totalPaidByAmount = paidByPayload.reduce((sum, p) => sum + p.amount, 0);
+    // Final validation for total paid amount
+    const totalPaidByAmount = paidByPayload.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
     if (Math.abs(totalPaidByAmount - totalExpenseAmount) > 0.01) {
       alert(`The sum of amounts paid (${totalPaidByAmount.toFixed(2)}) by each person does not match the total expense amount (${totalExpenseAmount.toFixed(2)}). Please check the 'Paid by' details.`);
       return;
@@ -344,7 +539,14 @@ const AddExpensePage = () => {
       owedByPayload = [{ user: paidByPayload[0].user, amount: totalExpenseAmount }];
     }
 
-    const expensePayload = {
+    // Log the payers data right before creating the payload
+  console.log("Final payers info for API request:", {
+    paidByPayload,
+    paidByFromForm: formData.paidBy,
+    participantPayers: formData.participants.filter(p => p.isPayer)
+  });
+
+  const expensePayload = {
       description: formData.title,
       amount: totalExpenseAmount,
       category: formData.category,
@@ -356,6 +558,15 @@ const AddExpensePage = () => {
       group: expenseType === "group" && selectedGroup ? selectedGroup._id : null,
     };
 
+    // Final validation of payload before sending
+    if (!Array.isArray(expensePayload.paidBy) || expensePayload.paidBy.length === 0) {
+      console.error("Critical error: paidBy is invalid", expensePayload.paidBy);
+      alert("An error occurred while preparing the payers data. Please try selecting the payer again.");
+      return;
+    }
+
+    console.log("Sending expense request with payload:", JSON.stringify(expensePayload));
+    
     try {
       const response = await axios.post("http://localhost:5000/api/expenses", expensePayload, {
         headers: { Authorization: `Bearer ${token}` },

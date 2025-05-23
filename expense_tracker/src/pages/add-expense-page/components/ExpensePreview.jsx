@@ -67,25 +67,65 @@ const ExpensePreview = ({ formData, categories, currentUser }) => {
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-gray-500">Paid by</span>
           <div className="flex items-center">
-            {formData.paidBy && formData.paidBy[0] ? (
-              <>
-                <div className="w-6 h-6 rounded-full overflow-hidden mr-2">
-                  {getPayerAvatar(formData.paidBy[0].user) ? (
-                    <Image
-                      src={getPayerAvatar(formData.paidBy[0].user)}
-                      alt={getPayerName(formData.paidBy[0].user)}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full rounded-full bg-lavender-500 flex items-center justify-center">
-                      <span className="text-white text-xs font-medium">{getPayerInitials(formData.paidBy[0].user)}</span>
-                    </div>
-                  )}
+            {formData.paidBy && formData.paidBy.length > 0 ? (
+              formData.paidBy.length === 1 ? (
+                <>
+                  <div className="w-6 h-6 rounded-full overflow-hidden mr-2">
+                    {getPayerAvatar(formData.paidBy[0].user) ? (
+                      <Image
+                        src={getPayerAvatar(formData.paidBy[0].user)}
+                        alt={getPayerName(formData.paidBy[0].user)}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full rounded-full bg-lavender-500 flex items-center justify-center">
+                        <span className="text-white text-xs font-medium">{getPayerInitials(formData.paidBy[0].user)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="font-medium text-gray-900">{getPayerName(formData.paidBy[0].user)}</span>
+                </>
+              ) : (
+                // Multiple payers display
+                <div className="flex items-center">
+                  <div className="flex -space-x-2 mr-2">
+                    {formData.paidBy.slice(0, 2).map((payer, index) => (
+                      <div key={index} className="w-6 h-6 rounded-full overflow-hidden border border-white">
+                        {getPayerAvatar(payer.user) ? (
+                          <Image
+                            src={getPayerAvatar(payer.user)}
+                            alt={getPayerName(payer.user)}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-full bg-lavender-500 flex items-center justify-center">
+                            <span className="text-white text-xs font-medium">{getPayerInitials(payer.user)}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {formData.paidBy.length > 2 && (
+                      <div className="w-6 h-6 rounded-full bg-gray-200 border border-white flex items-center justify-center">
+                        <span className="text-gray-600 text-xs font-medium">+{formData.paidBy.length - 2}</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="font-medium text-gray-900">Multiple payers</span>
                 </div>
-                <span className="font-medium text-gray-900">{getPayerName(formData.paidBy[0].user)}</span>
-              </>
+              )
             ) : (
-              <span className="text-gray-500">Not selected</span>
+              // Fallback to participants with isPayer=true if paidBy is empty but participants have payers
+              formData.participants && formData.participants.some(p => p.isPayer) ? (
+                <div className="flex items-center">
+                  <span className="font-medium text-gray-900">
+                    {formData.participants.filter(p => p.isPayer).length > 1 ? 
+                      "Multiple payers" : 
+                      getPayerName(formData.participants.find(p => p.isPayer)?.user?._id)}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-gray-500">Not selected</span>
+              )
             )}
           </div>
         </div>
