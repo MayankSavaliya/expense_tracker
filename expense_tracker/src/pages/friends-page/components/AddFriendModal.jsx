@@ -11,53 +11,76 @@ const AddFriendModal = ({ onClose, onFriendRequestSent }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [sendingRequest, setSendingRequest] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const [pendingRequests, setPendingRequests] = useState([]);
   const [toast, setToast] = useState(null);
+  const [excludedUserIds, setExcludedUserIds] = useState(new Set());
 
-  // Get current user and fetch pending requests on modal open
+  // Get current user, friends, and pending requests on modal open
   useEffect(() => {
-    const loadUserData = async () => {
+    const loadInitialData = async () => {
+      setIsLoading(true);
       try {
-        // Get the current user's profile 
         const profileResponse = await userAPI.getProfile();
+        let currentId = null;
         if (profileResponse.data.success) {
-          setCurrentUserId(profileResponse.data.data._id);
+          currentId = profileResponse.data.data._id;
+          setCurrentUserId(currentId);
         }
-        const outgoingResponse = await friendAPI.getOutgoingRequests();
+
+        const [friendsResponse, outgoingResponse, incomingResponse] = await Promise.all([
+          friendAPI.getFriends(),
+          friendAPI.getOutgoingRequests(),
+          friendAPI.getIncomingRequests(),
+        ]);
+
+        const friendIds = friendsResponse.data.data.map(friend => friend._id);
+        const outgoingRecipientIds = outgoingResponse.data.data.map(req => req.recipient._id);
+        const incomingRequesterIds = incomingResponse.data.data.map(req => req.requester._id);
         
-        const outgoingIds = outgoingResponse.data.data.map(req => req.recipient._id);
-        // Store all pending request ids
-        setPendingRequests([...outgoingIds]);
-        console.log('Pending Requests:', pendingRequests);
+        const allExcludedIds = new Set([
+          ...friendIds, 
+          ...outgoingRecipientIds, 
+          ...incomingRequesterIds
+        ]);
+        if (currentId) {
+          allExcludedIds.add(currentId);
+        }
+        setExcludedUserIds(allExcludedIds);
+        
+        // Initial search after loading excluded IDs
+        await handleSearchInternal("", allExcludedIds, currentId);
+
       } catch (err) {
-        console.error('Failed to load user data:', err);
+        console.error('Failed to load initial data:', err);
+        setToast({ type: 'error', message: 'Error loading initial data. Please try again.' });
+      } finally {
+        setIsLoading(false);
       }
     };
     
-    loadUserData();
-  }, []);
+    loadInitialData();
+  }, []); // Runs once on mount
 
-  // Search users function
-  const handleSearch = async (e) => {
-    if (e) e.preventDefault();
-    
+  // Debounced search function
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (currentUserId !== null) { // Ensure currentUserId and excludedUserIds are loaded
+        handleSearchInternal(searchTerm, excludedUserIds, currentUserId);
+      }
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, currentUserId, excludedUserIds]); // Re-run if searchTerm, currentUserId, or excludedUserIds changes
+
+  // Search users function (internal version, takes excluded IDs as param)
+  const handleSearchInternal = async (currentSearchTerm, currentExcludedUserIds, currentProfileId) => {
     setIsLoading(true);
-    
     try {
-      // Get friends to exclude them from results
-      const friendsResponse = await friendAPI.getFriends();
-      const friendIds = friendsResponse.data.data.map(friend => friend._id);
-      console.log('Friend IDs:', friendIds);
-      // Get users
       const response = await userAPI.getUsers();
-      console.log(response.data.data);
       const users = response.data.data.filter(user => 
-        user._id !== currentUserId && 
-        !friendIds.includes(user._id) &&
-        !pendingRequests.includes(user._id) &&
-        (searchTerm.trim() === "" || 
-          user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-          user.email.toLowerCase().includes(searchTerm.toLowerCase()))
+        !currentExcludedUserIds.has(user._id) &&
+        (currentSearchTerm.trim() === "" || 
+          user.name.toLowerCase().includes(currentSearchTerm.toLowerCase()) || 
+          user.email.toLowerCase().includes(currentSearchTerm.toLowerCase()))
       ).map(user => ({
         id: user._id,
         name: user.name,
@@ -68,20 +91,12 @@ const AddFriendModal = ({ onClose, onFriendRequestSent }) => {
       setSearchResults(users);
     } catch (err) {
       console.error('Error searching users:', err);
+      setToast({ type: 'error', message: 'Error searching users. Please try again.' });
     } finally {
       setIsLoading(false);
     }
   };
   
-  // Add debounce for search
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      handleSearch(); // Will handle both empty and non-empty search terms
-    }, 500); // 500ms delay
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm]);
-
   // Handle friend request
   const [sentRequests, setSentRequests] = useState([]);
   const [requestError, setRequestError] = useState(null);
@@ -91,32 +106,28 @@ const AddFriendModal = ({ onClose, onFriendRequestSent }) => {
     setSendingRequest(true);
     setRequestError(null);
     
-    // Find user info for better toast messages
     const userInfo = searchResults.find(user => user.id === userId);
     
     try {
       await friendAPI.sendFriendRequest({ userId });
       
-      // Update local state to show request was sent without closing modal
       setSentRequests([...sentRequests, userId]);
       
-      // Update search results to reflect the sent request
-      setSearchResults(
-        searchResults.filter(user => user.id !== userId)
-      );
+      // Update excludedUserIds to include the newly sent request
+      setExcludedUserIds(prevExcludedIds => new Set(prevExcludedIds).add(userId));
       
-      // Update pending requests list
-      setPendingRequests([...pendingRequests, userId]);
+      // Search results are already filtered by excludedUserIds in the debounced effect,
+      // so removing manually here might be redundant if the effect re-runs quickly.
+      // However, for immediate UI feedback, explicitly filter:
+      setSearchResults(prevResults => prevResults.filter(user => user.id !== userId));
       
-      // Show success toast
       setToast({
         type: 'success',
         message: `Friend request sent to ${userInfo?.name || 'user'}!`,
       });
       
-      // Notify parent component to refresh friend data
       if (typeof onFriendRequestSent === 'function') {
-        onFriendRequestSent();
+        onFriendRequestSent(); // This should trigger a reload in the parent, which will update its friend/request lists
       }
     } catch (err) {
       console.error('Error sending friend request:', err);
@@ -169,7 +180,7 @@ const AddFriendModal = ({ onClose, onFriendRequestSent }) => {
             </div>
           )}
           
-          <form onSubmit={handleSearch} className="mb-5">
+          <form onSubmit={(e) => { e.preventDefault(); handleSearchInternal(searchTerm, excludedUserIds, currentUserId); }} className="mb-5">
             <div className="mb-4">
               <label htmlFor="friendSearch" className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
                 <span>Search by email or username</span>
