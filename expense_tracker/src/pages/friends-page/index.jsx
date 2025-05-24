@@ -193,6 +193,7 @@ const FriendsPage = () => {
                           <FriendCard 
                             key={friend.id} 
                             friend={friend} 
+                            onRefresh={reloadData}
                             onRemoveFriend={async (friendId) => {
                               try {
                                 await friendAPI.removeFriend(friendId);

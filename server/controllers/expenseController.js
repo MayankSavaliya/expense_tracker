@@ -14,7 +14,7 @@ export const createExpense = async (req, res, next) => {
     if (!req.user) {
       return next(new ErrorResponse('User not authenticated', StatusCodes.UNAUTHORIZED));
     }
-    console.log(req.body);
+    
     const { amount: totalAmount } = req.body; 
     const splitType = req.body.splitType || req.body.splitMethod || 'equal';
 

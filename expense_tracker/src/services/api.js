@@ -41,6 +41,8 @@ export const transactionAPI = {
   getSimpleBalanceSummary: () => api.get('/api/transactions/simple-summary'),
   getTransactions: () => api.get('/api/transactions'),
   getTransactionById: (id) => api.get(`/api/transactions/${id}`),
+  getBalanceBetweenUsers: (userId1, userId2) => api.get(`/api/transactions/debts/between/${userId1}/${userId2}`),
+  createSettlement: (data) => api.post('/api/transactions/settlement', data),
 };
 
 // Expense related API calls

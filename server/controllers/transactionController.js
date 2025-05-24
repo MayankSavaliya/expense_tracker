@@ -323,56 +323,28 @@ export const getUserDebts = async (req, res) => {
   }
 };
 
-// Get debts between two specific users
-export const getDebtsBetweenUsers = async (req, res) => {
+// Get balance between two specific users
+export const getBalanceBetweenUsers = async (req, res) => {
   try {
     const { userId1, userId2 } = req.params;
     
-    // Get all transactions between these two users
-    const transactions = await Transaction.find({
-      $or: [
-        { payer: userId1, 'debtors.user': userId2 },
-        { payer: userId2, 'debtors.user': userId1 }
-      ]
-    }).populate('payer', 'name email')
-      .populate('debtors.user', 'name email')
-      .populate('group', 'name');
-
-    let user1OwesUser2 = 0;
-    let user2OwesUser1 = 0;
-    const transactionDetails = [];
-
-    transactions.forEach(transaction => {
-      const amountPerPerson = transaction.amount / transaction.debtors.length;
-      const isUser1Payer = transaction.payer._id.toString() === userId1;
-      
-      if (isUser1Payer) {
-        user2OwesUser1 += amountPerPerson;
-      } else {
-        user1OwesUser2 += amountPerPerson;
-      }
-
-      transactionDetails.push({
-        transactionId: transaction._id,
-        amount: amountPerPerson,
-        date: transaction.date,
-        description: transaction.description,
-        group: transaction.group?.name,
-        payer: transaction.payer.name,
-        debtor: isUser1Payer ? 'User 2' : 'User 1'
+    // Get user information for the response
+    const user1 = await User.findById(userId1).select('name email avatar');
+    const user2 = await User.findById(userId2).select('name email avatar');
+    
+    if (!user1 || !user2) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "One or both users not found" 
       });
-    });
-
-    const netAmount = user1OwesUser2 - user2OwesUser1;
+    }
+    
+    // Use our new method to get the balance between users
+    const balanceData = await Transaction.getBalanceBetweenUsers(userId1, userId2);
 
     res.json({
-      netAmount,
-      summary: {
-        user1OwesUser2,
-        user2OwesUser1,
-        netPosition: netAmount
-      },
-      transactions: transactionDetails
+      success: true,
+      data: balanceData
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -463,12 +435,53 @@ export const getGroupDebts = async (req, res) => {
   }
 };
 
+// @desc    Create a settlement between two users
+// @route   POST /api/transactions/settlement
+// @access  Private
+export const createSettlement = async (req, res) => {
+  try {
+    const { fromUserId, toUserId, amount, description } = req.body;
+    
+    // Validate inputs
+    if (!fromUserId || !toUserId || !amount) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Missing required fields: fromUserId, toUserId, or amount" 
+      });
+    }
+    
+    // Ensure amount is positive
+    const settleAmount = Math.abs(parseFloat(amount));
+    
+    // Create the settlement transaction
+    const settlement = await Transaction.createSettlement(
+      fromUserId, 
+      toUserId, 
+      settleAmount, 
+      description || "Settlement"
+    );
+    
+    res.status(201).json({
+      success: true,
+      message: "Settlement created successfully",
+      data: settlement
+    });
+  } catch (error) {
+    console.error('Error creating settlement:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};
+
 export default {
   getTransactions,
   getTransactionById,
   getBalanceSummary,
   getSimpleBalanceSummary,
   getUserDebts,
-  getDebtsBetweenUsers,
-  getGroupDebts
+  getBalanceBetweenUsers,
+  getGroupDebts,
+  createSettlement
 };

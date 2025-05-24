@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import User from './User.js';
+import { relative } from 'path';
+import { group } from 'console';
 
 const transactionSchema = mongoose.Schema(
   {
@@ -17,7 +19,8 @@ const transactionSchema = mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
       },
-    ],    netBalances: [
+    ],
+    netBalances: [
       {
         user: {
           type: mongoose.Schema.Types.ObjectId,
@@ -103,7 +106,6 @@ transactionSchema.statics.updateOrCreateFromExpense = async function(expense) {
   try {
     const groupId = expense.group || null;
     const isPersonal = !groupId;
-    console.log(groupId);
     // Extract unique participants from expense
     const participants = [
       ...new Set([
@@ -179,6 +181,101 @@ transactionSchema.statics.updateOrCreateFromExpense = async function(expense) {
 
     // Save and return the updated transaction
     await transaction.save();
+    return transaction;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get the balance between two specific users across all transactions
+ * @param {String} user1Id - ID of the first user
+ * @param {String} user2Id - ID of the second user
+ * @returns {Object} Object containing the direct balance between the users
+ */
+transactionSchema.statics.getBalanceBetweenUsers = async function(user1Id, user2Id) {
+  try {
+    // Convert IDs to strings for consistent comparison
+    user1Id = user1Id.toString();
+    user2Id = user2Id.toString();
+    
+    // Find all transactions where both users are participants
+    const transactions = await this.find({
+      participants: { $all: [user1Id, user2Id] }
+    }).populate('minimizedTransactions.from minimizedTransactions.to', 'name avatar');
+
+    // Extract direct transactions between these two users
+    let directTransactions = [];
+    let netBalance = 0;
+    transactions.forEach(transaction => {
+      // From minimizedTransactions, extract only those between the two users
+      const relevantTransactions = transaction.minimizedTransactions.filter(t => 
+        (t.from._id.toString() === user1Id && t.to._id.toString() === user2Id) || 
+        (t.from._id.toString() === user2Id && t.to._id.toString() === user1Id)
+      );
+
+      relevantTransactions.forEach(t => {
+        // If user1 owes user2, add to balance
+        if (t.from._id.toString() === user1Id && t.to._id.toString() === user2Id) {
+          netBalance += t.amount;
+          console.log(netBalance);
+          directTransactions.push({
+            ...t.toObject(),
+            date: transaction.updatedAt,
+            group: transaction.group,
+            isPersonal: transaction.isPersonal
+          });
+        } 
+        // If user2 owes user1, subtract from balance
+        else if (t.from._id.toString() === user2Id && t.to._id.toString() === user1Id) {
+          netBalance -= t.amount;
+          directTransactions.push({
+            ...t.toObject(),
+            date: transaction.updatedAt,
+            group: transaction.group,
+            isPersonal: transaction.isPersonal
+          });
+        }
+      });
+    });
+
+    return { 
+      balance: parseFloat(netBalance.toFixed(2)), 
+      isUser1Debtor: netBalance < 0, // If positive, user1 owes user2
+      transactions: directTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)) 
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Create a settlement transaction between two users
+ * @param {String} fromUserId - ID of the user who owes money
+ * @param {String} toUserId - ID of the user who is owed money
+ * @param {Number} amount - Amount being settled
+ * @param {String} description - Optional description of the settlement
+ * @returns {Object} The updated transaction object
+ */
+transactionSchema.statics.createSettlement = async function(fromUserId, toUserId, amount, description = "Settlement") {
+  try {
+    // Create a simple settlement structure (mirroring the expense structure)
+    const settlementData = {
+      paidBy: [{ user: fromUserId, amount: amount }], // fromUserId made a payment
+      owedBy: [{ user: toUserId, amount: 0 }],      // toUserId is involved; amount 0 for participant identification
+      userBalances: [
+        { user: fromUserId, balance: -amount },  // Payer's net balance position decreases
+        { user: toUserId, balance: amount }    // Receiver's net balance position increases
+      ],
+      description,
+      isPersonal: true, // Explicitly a personal transaction
+      group: null,      // No group involved
+      // isSettlement: true // This field can be added to transactionSchema if needed for querying settlements
+    };
+    
+    // Reuse the existing updateOrCreateFromExpense method
+    const transaction = await this.updateOrCreateFromExpense(settlementData);
+    
     return transaction;
   } catch (error) {
     throw error;

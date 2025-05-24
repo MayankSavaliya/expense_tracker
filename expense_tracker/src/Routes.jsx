@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route, Navigate, Link } from "react-router-dom";
 import ScrollToTop from "./components/ScrollToTop";
+import HomePage from "./pages/home-page";
 import Dashboard from "./pages/dashboard";
 import FriendsPage from "./pages/friends-page";
 import GroupsPage from "./pages/groups-page";
@@ -34,6 +35,12 @@ const AppRoutes = () => {
     <BrowserRouter>
       <ScrollToTop />
       <RouterRoutes>
+        {/* Landing page for non-authenticated users */}
+        <Route 
+          path="/" 
+          element={!isAuthenticated ? <HomePage /> : <Navigate to="/dashboard" replace />}
+        />
+
         {/* Public routes: accessible regardless of authentication state */}
         {/* If authenticated, redirect public auth pages to dashboard */}
         <Route 
@@ -56,8 +63,6 @@ const AppRoutes = () => {
         {/* Protected Routes: Require authentication */}
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
-            {/* Redirect root to dashboard if authenticated, otherwise this won't be reached due to ProtectedRoute */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} /> 
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="friends-page" element={<FriendsPage />} />
             <Route path="groups-page" element={<GroupsPage />} />
