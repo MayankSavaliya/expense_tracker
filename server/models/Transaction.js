@@ -1,7 +1,4 @@
 import mongoose from 'mongoose';
-import User from './User.js';
-import { relative } from 'path';
-import { group } from 'console';
 
 const transactionSchema = mongoose.Schema(
   {
@@ -115,30 +112,81 @@ transactionSchema.statics.updateOrCreateFromExpense = async function(expense) {
     ];
 
     // Try to find an existing transaction
-    let transaction = await this.findOne(
-      groupId 
-        ? { group: groupId } 
-        : { 
-            isPersonal: true, 
-            participants: { $all: participants, $size: participants.length } 
-          }
-    );
-    //group id is null then it is a personal transaction and directly add the balance into the user account
-    if (groupId === null) {
-      const userId = expense.paidBy[0].user.toString();
-      const userBalance = expense.owedBy.find(o => o.user.toString() === userId);
-      if (userBalance) {
-        const balance = userBalance.amount;
-        const user = await User.find(
-          { _id: userId }
-        );
-        if (user) {
-          user.balance += balance;
-          await user.save();
+    let transaction = await this.findOne({group: groupId });
+
+    if(isPersonal){
+      const netBalances = expense.userBalances.map(balance => ({
+        user: balance.user,
+        balance: parseFloat(balance.balance.toFixed(2))
+      })).filter(item => Math.abs(item.balance) >= 0.01);
+
+      const minimizedTransactions=this.minimizeTransactions(netBalances);
+
+       for (const minTx of minimizedTransactions) {
+        const participants = [minTx.from._id.toString(), minTx.to._id.toString()];
+        
+        // Try to find existing transaction between these two users
+        let transaction = await this.findOne({
+          isPersonal: true,
+          participants: { $all: participants, $size: 2 }
+        });
+
+        if (!transaction) {
+          // Create new transaction if none exists
+          transaction = new this({
+            isPersonal: true,
+            participants,
+            netBalances: [
+              { user: minTx.from, balance: -minTx.amount },
+              { user: minTx.to, balance: minTx.amount }
+            ],
+            minimizedTransactions: [minTx]
+          });
+
+          await transaction.save();
+        } 
+        else {
+
+          // Update net balances
+          const balanceMap = new Map();
+
+          // Add existing balances to the map
+          transaction.netBalances.forEach(item => {
+            balanceMap.set(item.user.toString(), item.balance);
+          });
+          // Update balances based on new minimized transaction
+          balanceMap.set(minTx.from.toString(),
+            (balanceMap.get(minTx.from.toString()) || 0) - minTx.amount);
+          balanceMap.set(minTx.to.toString(),
+            (balanceMap.get(minTx.to.toString()) || 0) + minTx.amount);
+          
+          transaction.netBalances = Array.from(balanceMap.entries())
+            .map(([userId, balance]) => ({
+              user: userId,
+              balance: parseFloat(balance.toFixed(2))
+            }));
+          
+          transaction.minimizedTransactions = this.minimizeTransactions(transaction.netBalances);   
+
+          await transaction.save();
         }
       }
+      
+      // Return the first transaction (if any were created/updated)
+      if (minimizedTransactions.length > 0) {
+        return await this.findOne({
+          isPersonal: true,
+          participants: { 
+            $all: [minimizedTransactions[0].from, minimizedTransactions[0].to],
+            $size: 2 
+          }
+        });
+      }
+      return null;
     }
 
+
+    
     if (!transaction) {
       // If no transaction exists, create one
       transaction = new this({

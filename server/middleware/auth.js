@@ -14,7 +14,6 @@ export const protect = async (req, res, next) => {
     ) {
       token = req.headers.authorization.split(' ')[1];
     }
-
     // Make sure token exists
     if (!token) {
       return next(
@@ -33,7 +32,6 @@ export const protect = async (req, res, next) => {
         new ErrorResponse('User not found', StatusCodes.NOT_FOUND)
       );
     }
-
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);

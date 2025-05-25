@@ -199,7 +199,7 @@ export const getBalanceSummary = async (req, res, next) => {
   }
 };
 
-// @desc    Get simplified balance summary (total amounts only)
+// @desc    Get simplified balance summary (total amounts only)  for the dashboard page total owed and toal owes
 // @route   GET /api/transactions/simple-summary
 // @access  Private
 export const getSimpleBalanceSummary = async (req, res, next) => {

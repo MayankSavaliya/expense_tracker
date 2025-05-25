@@ -16,14 +16,14 @@ const router = express.Router();
 router.use(protect);
 
 // Friend request endpoints
-router.post('/request', sendFriendRequest);
-router.put('/accept/:id', acceptFriendRequest);
-router.put('/reject/:id', rejectFriendRequest);
-router.get('/incoming', getIncomingRequests);
-router.get('/outgoing', getOutgoingRequests);
+router.post('/request', sendFriendRequest);  // Send a friend request
+router.put('/accept/:id', acceptFriendRequest); // Accept a friend request
+router.put('/reject/:id', rejectFriendRequest); // Reject a friend request
+router.get('/incoming', getIncomingRequests); // Get incoming friend requests
+router.get('/outgoing', getOutgoingRequests); // Get outgoing friend requests
 
 // Friends management
-router.get('/', getFriends);
-router.delete('/:id', removeFriend);
+router.get('/', getFriends); // Get all friends
+router.delete('/:id', removeFriend); // Remove a friend
 
 export default router;

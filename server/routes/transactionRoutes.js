@@ -18,18 +18,18 @@ router.use(protect);
 
 // Debt tracking routes
 router.get('/debts/:userId', getUserDebts);
-router.get('/debts/between/:userId1/:userId2', getBalanceBetweenUsers);
-router.get('/debts/group/:groupId', getGroupDebts);
+router.get('/debts/between/:userId1/:userId2', getBalanceBetweenUsers);  //Friend page betwen user balance
+router.get('/debts/group/:groupId', getGroupDebts);  
 
 // Settlement route
 router.post('/settlement', createSettlement);
 
 // Specific routes first
-router.get('/summary', getBalanceSummary);
-router.get('/simple-summary', getSimpleBalanceSummary);
+router.get('/summary', getBalanceSummary); //needs some modification to return the summary of all transactions
+router.get('/simple-summary', getSimpleBalanceSummary);  //Only for the dashboard total,owe,owed
 
 // Then the parameterized routes
-router.get('/', getTransactions);
-router.get('/:id', getTransactionById);
+router.get('/', getTransactions); //Get all transactions
+router.get('/:id', getTransactionById); //Get specific transaction by ID
 
 export default router;

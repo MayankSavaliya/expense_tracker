@@ -265,7 +265,7 @@ export const getGroupBalances = async (req, res, next) => {
     if (!group) {
       return next(
         new ErrorResponse(`Group not found with id of ${req.params.id}`, StatusCodes.NOT_FOUND)
-      );n
+      );
     }
 
     // Check if user is a member of the group

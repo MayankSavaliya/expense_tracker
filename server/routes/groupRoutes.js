@@ -16,19 +16,19 @@ const router = express.Router();
 router.use(protect);
 
 router.route('/')
-  .post(createGroup);
+  .post(createGroup); //crate a new group
 
-router.get('/my-groups', getMyGroups);
+router.get('/my-groups', getMyGroups);  // Get all groups for the authenticated user
 
 router.route('/:id')
-  .get(getGroupById)
-  .delete(deleteGroup);
+  .get(getGroupById)  // Get a specific group by ID
+  .delete(deleteGroup); //needs to be implemented again
 
 router.get('/:id/balances', getGroupBalances);
 
 router.route('/:id/members')
-  .post(addMember);
+  .post(addMember);    //needs to be implemented again
 
-router.delete('/:id/members/:memberId', removeMember);
+router.delete('/:id/members/:memberId', removeMember); //needs to be implemented again
 
 export default router;
