@@ -268,6 +268,7 @@ transactionSchema.statics.getBalanceBetweenUsers = async function(user1Id, user2
           netBalance += t.amount;
           console.log(netBalance);
           directTransactions.push({
+            transactionId: transaction._id,
             ...t.toObject(),
             date: transaction.updatedAt,
             group: transaction.group,
@@ -278,6 +279,7 @@ transactionSchema.statics.getBalanceBetweenUsers = async function(user1Id, user2
         else if (t.from._id.toString() === user2Id && t.to._id.toString() === user1Id) {
           netBalance -= t.amount;
           directTransactions.push({
+            transactionId: transaction._id,
             ...t.toObject(),
             date: transaction.updatedAt,
             group: transaction.group,

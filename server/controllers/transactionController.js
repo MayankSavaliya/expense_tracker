@@ -440,7 +440,7 @@ export const getGroupDebts = async (req, res) => {
 // @access  Private
 export const createSettlement = async (req, res) => {
   try {
-    const { fromUserId, toUserId, amount, description } = req.body;
+    const { fromUserId, toUserId, amount} = req.body;
     
     // Validate inputs
     if (!fromUserId || !toUserId || !amount) {
@@ -450,21 +450,79 @@ export const createSettlement = async (req, res) => {
       });
     }
     
-    // Ensure amount is positive
-    const settleAmount = Math.abs(parseFloat(amount));
-    
-    // Create the settlement transaction
-    const settlement = await Transaction.createSettlement(
-      fromUserId, 
-      toUserId, 
-      settleAmount, 
-      description || "Settlement"
-    );
-    
-    res.status(201).json({
-      success: true,
-      message: "Settlement created successfully",
-      data: settlement
+    // //First of all check if the users exist
+    const fromUser = await User.findById(fromUserId);
+    const toUser = await User.findById(toUserId);
+    if (!fromUser || !toUser) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "One or both users not found" 
+      });
+    }
+
+    //Now find the balance between the two users
+    const data = await Transaction.getBalanceBetweenUsers(fromUserId, toUserId);
+
+    //sort the transactions by touser to from first and after fromuser to touser and in tie case use amount
+    data.transactions.sort((a, b) => {
+      if (a.from._id.toString() === fromUserId && a.to._id.toString() === toUserId) {
+        return 1; // fromUser to toUser comes second
+      } else if (a.from._id.toString() === toUserId && a.to._id.toString() === fromUserId) {
+        return -1; // toUser to fromUser comes first
+      }
+      else return a.amount - b.amount; // sort by amount in case of tie
+    });
+
+    //Now iterate through the transactions and settle the amount
+    let remainingAmount = amount;
+
+    for (const tr of data.transactions) {
+      if (remainingAmount <= 0) break; // No more amount to settle
+
+      const transactionAmount = tr.amount;
+      //now check if the touser to from user then direct remove that amount from the transaction
+      if (tr.from._id.toString() === fromUserId && tr.to._id.toString() === toUserId) {
+        // This is a transaction from fromUser to toUser
+        const requiredAmount = Math.min(remainingAmount, transactionAmount);
+        const transaction = await Transaction.findById(tr._id);
+
+        transaction.netBalances.forEach(balance => {
+          if (balance.user._id.toString() === fromUserId) {
+            balance.balance += requiredAmount; // Remove from fromUser
+          }
+          else if (balance.user._id.toString() === toUserId) {
+            balance.balance -= requiredAmount; // Add to toUser
+          }
+        });
+        await transaction.save();
+        // Update remaining amount
+        remainingAmount -= requiredAmount;
+        //call minimizeTransaction to update the minimized transactions
+        transaction.minimizedTransactions = await transaction.minimizeTransaction(transaction.netBalances);
+
+        await transaction.save();
+      } else if (tr.from._id.toString() === toUserId && tr.to._id.toString() === fromUserId) {
+        // This is a transaction from toUser to fromUser direct settle this no need to check the balance
+        const transaction = await Transaction.findById(tr._id);
+
+        //Now add balance into the to and remove from the from
+        transaction.netBalances.forEach(balance => {
+          if (balance.user._id.toString() === fromUserId) {
+            balance.balance -= remainingAmount; // Remove from fromUser
+          } else if (balance.user._id.toString() === toUserId) {
+            balance.balance += remainingAmount; // Add to toUser
+          }          
+        });
+
+        await transaction.save();
+        //call minimizeTransaction to update the minimized transactions
+        transaction.minimizedTransactions=await transaction.minimizeTransaction(transaction.netBalances);
+
+        await transaction.save();
+      }
+    }
+    res.status(200).json({
+      success:true
     });
   } catch (error) {
     console.error('Error creating settlement:', error);
@@ -475,6 +533,39 @@ export const createSettlement = async (req, res) => {
   }
 };
 
+export const groupSettelment = async (req, res) => {
+  try{
+    const {groupId, toUserId ,amount} = req.body;
+
+    const user = req.user;
+    if (!groupId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Group ID is required" 
+      });
+    }
+    const transaction= await Transaction.findOne({ group: groupId });
+
+    transaction.netBalances.forEach(balance => {
+      if (balance.user._id.toString() === user._id.toString()) {
+        balance.balance += amount; // Remove from current user
+      } else if (balance.user._id.toString() === toUserId) {
+        balance.balance -= amount; // Add to the target user
+      }
+    });
+
+    transaction.minimizedTransactions = await transaction.minimizeTransaction(transaction.netBalances);
+    await transaction.save();
+  }
+  catch (error) {
+    console.error('Error creating group settlement:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+}
+
 export default {
   getTransactions,
   getTransactionById,
@@ -483,5 +574,6 @@ export default {
   getUserDebts,
   getBalanceBetweenUsers,
   getGroupDebts,
-  createSettlement
+  createSettlement,
+  groupSettelment
 };

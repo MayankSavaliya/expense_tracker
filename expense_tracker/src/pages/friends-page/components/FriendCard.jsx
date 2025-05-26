@@ -54,6 +54,7 @@ const FriendCard = ({ friend, onRemoveFriend, onRefresh }) => {
       try {
         const response = await transactionAPI.getBalanceBetweenUsers(user._id, friend.id);
         
+        console.log('Balance data response:', response.data);
         // Store complete data including transactions
         setBalanceData({
           balance: Math.abs(response.data.data.balance),
