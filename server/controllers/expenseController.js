@@ -49,6 +49,7 @@ export const getMyExpenses = async (req, res, next) => {
       .populate('paidBy.user', 'name email avatar')
       .populate('owedBy.user', 'name email avatar')
       .populate('group', 'name')
+      .populate('createdBy', 'name email avatar')
       .sort({ date: -1 });
 
     // console.log(expenses);

@@ -75,9 +75,15 @@ const MemberCard = ({ member, user, toggleMember, isExpanded, data }) => {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <div className="text-right text-sm text-gray-500">
-            <div>Paid: {formatCurrency(member.paid || 0)}</div>
-            <div>{member.balance > 0 ? 'Owed by others' : 'Owes to others'}: {formatCurrency(Math.abs(member.balance || 0))}</div>
+          <div className="text-right text-sm">
+            <div className="text-gray-500">Paid: {formatCurrency(member.paid || 0)}</div>
+            <div className={member.balance > 0 ? 'text-success' : member.balance < 0 ? 'text-error' : 'text-gray-500'}>
+              {member.balance > 0 
+                ? `Owed by others: ${formatCurrency(member.balance)}`
+                : member.balance < 0 
+                ? `Owes to others: ${formatCurrency(Math.abs(member.balance))}`
+                : 'All settled up'}
+            </div>
           </div>
           <Icon 
             name={isExpanded ? 'ChevronUp' : 'ChevronDown'} 
@@ -97,8 +103,9 @@ const MemberCard = ({ member, user, toggleMember, isExpanded, data }) => {
               if (!otherMember) return null;
               
               const amount = settlement.amount;
-              // If current member balance is negative, they owe money
-              const isOwing = member.balance < 0;
+              // Determine if the settlement is an "owing" settlement based on amount sign
+              // If amount is negative, current member owes the other member
+              const isOwing = amount < 0;
 
               return (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -119,7 +126,7 @@ const MemberCard = ({ member, user, toggleMember, isExpanded, data }) => {
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className={`font-medium ${isOwing ? 'text-error' : 'text-success'}`}>
-                      {formatCurrency(amount)}
+                      {formatCurrency(Math.abs(amount))}
                     </span>
                     <Icon 
                       name={isOwing ? 'ArrowUpRight' : 'ArrowDownRight'} 
@@ -263,71 +270,6 @@ const BalancesTab = ({ data }) => {
           )}
         </div>
       </div>
-      
-      {/* Settlement Suggestions - Show if there are any balances to settle */}
-      {data.members.some(member => member.balance !== 0) && (
-        <div className="mt-8">
-          <h3 className="text-lg font-medium text-gray-800 mb-4">Suggested Settlements</h3>
-          
-          {/* Find members who owe money */}
-          {data.members.some(member => member.balance < 0) ? (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="space-y-4">
-                {data.members.filter(member => member.balance < 0).map((debtor) => {
-                  const creditors = debtor.settlements?.filter(settlement => settlement.amount > 0) || [];
-                  
-                  return creditors.length > 0 ? (
-                    <div key={debtor.id} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
-                      <div className="flex items-center mb-3">
-                        <img 
-                          src={debtor.avatar || DEFAULT_AVATAR} 
-                          alt={debtor.name} 
-                          className="w-10 h-10 rounded-full mr-2"
-                        />
-                        <h4 className="font-medium text-gray-900">{debtor.name} should pay:</h4>
-                      </div>
-                      
-                      <div className="ml-12 space-y-3">
-                        {creditors.map((settlement, idx) => {
-                          const creditor = data.members.find(m => m.id === settlement.id);
-                          if (!creditor) return null;
-                          
-                          return (
-                            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                              <div className="flex items-center">
-                                <img 
-                                  src={creditor.avatar || DEFAULT_AVATAR} 
-                                  alt={creditor.name} 
-                                  className="w-8 h-8 rounded-full mr-2"
-                                />
-                                <span className="text-sm font-medium text-gray-800">{creditor.name}</span>
-                              </div>
-                              <div className="flex items-center">
-                                <span className="font-medium text-error">
-                                  {formatCurrency(settlement.amount)}
-                                </span>
-                                <button className="ml-4 px-3 py-1 bg-mint-500 text-white text-xs rounded hover:bg-mint-600 transition-colors">
-                                  Mark as Paid
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null;
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-              <Icon name="Check" size={40} className="mx-auto text-success mb-2" />
-              <h4 className="text-lg font-medium text-gray-800 mb-1">All settled up!</h4>
-              <p className="text-gray-600">There are no outstanding balances in this group.</p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };

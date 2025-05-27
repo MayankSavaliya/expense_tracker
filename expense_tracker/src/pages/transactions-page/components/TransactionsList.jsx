@@ -91,14 +91,14 @@ const TransactionsList = ({ filters, searchQuery }) => {
           rawExpenses = Array.isArray(response.data.data) ? response.data.data : [response.data.data];
         } else if (Array.isArray(response.data)) {
           rawExpenses = response.data;
-        }
-
-        // Create transaction objects from the API data
+        }        // Create transaction objects from the API data
         const formattedExpenses = rawExpenses.map((item) => {
           // Get recipient for payments/settlements if available
           const recipient = item.paidBy?.find(p => p.user?._id !== item.createdBy?._id)?.user;
           
-          return {
+          // Get the person who paid (first person in paidBy array or created by if not specified)
+          const payer = item.paidBy?.length > 0 ? item.paidBy[0].user : item.createdBy;
+            return {
             id: item._id,
             type: item.paidBy && item.paidBy.length > 0 && item.owedBy && item.owedBy.length > 0 ? "expense" : 
                   (item.paidBy && item.paidBy.length === 1 && item.owedBy && item.owedBy.length === 1) ? "payment" : "expense",
@@ -110,9 +110,16 @@ const TransactionsList = ({ filters, searchQuery }) => {
             timestamp: item.date,
             formattedDate: item.date ? formatDateDisplay(item.date) : "N/A",
             category: item.category || "Other",
-            user: item.createdBy
-              ? { id: item.createdBy._id, name: item.createdBy.name, avatar: item.createdBy.avatar || "/assets/images/no_image.png" }
+            user: payer
+              ? { id: payer._id, name: payer.name, avatar: payer.avatar || "/assets/images/no_image.png" }
               : { id: "unknownUser", name: "Unknown User", avatar: "/assets/images/no_image.png" },
+            // Store the entire paidBy array for UI display
+            payers: item.paidBy?.map(p => ({
+              id: p.user?._id,
+              name: p.user?.name || "Unknown",
+              avatar: p.user?.avatar || "/assets/images/no_image.png",
+              amount: p.amount || 0,
+            })) || [],
             participants: item.owedBy?.map((p) => ({
               id: p.user?._id,
               name: p.user?.name || "Unknown",
@@ -354,14 +361,42 @@ const TransactionsList = ({ filters, searchQuery }) => {
                               {transaction.type === "expense" ? (
                                 <>
                                   <div className="flex items-center">
-                                    <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-white shadow-sm">
-                                      <Image 
-                                        src={transaction.user?.avatar} 
-                                        alt={transaction.user?.name} 
-                                        className="w-full h-full object-cover"
-                                      />
-                                    </div>
-                                    <span className="ml-2 text-sm font-medium text-gray-700">{transaction.user?.name} paid</span>
+                                    {transaction.payers && transaction.payers.length > 0 ? (
+                                      <>
+                                        <div className="flex -space-x-1 mr-2">
+                                          {transaction.payers.slice(0, 2).map((payer, index) => (
+                                            <div key={`payer-${index}`} className="w-8 h-8 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                                              <Image 
+                                                src={payer.avatar} 
+                                                alt={payer.name} 
+                                                className="w-full h-full object-cover"
+                                              />
+                                            </div>
+                                          ))}
+                                          {transaction.payers.length > 2 && (
+                                            <div className="w-8 h-8 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center text-xs font-medium text-gray-600 shadow-sm">
+                                              +{transaction.payers.length - 2}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <span className="text-sm font-medium text-gray-700">
+                                          {transaction.payers.length === 1 
+                                            ? `${transaction.payers[0].name} paid` 
+                                            : `${transaction.payers[0].name} and ${transaction.payers.length - 1} other${transaction.payers.length > 2 ? 's' : ''} paid`}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                                          <Image 
+                                            src={transaction.user?.avatar} 
+                                            alt={transaction.user?.name} 
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                        <span className="ml-2 text-sm font-medium text-gray-700">{transaction.user?.name} paid</span>
+                                      </>
+                                    )}
                                   </div>
                                   
                                   <div className="ml-3 flex -space-x-2">

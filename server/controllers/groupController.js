@@ -311,14 +311,14 @@ export const getGroupBalances = async (req, res, next) => {
         const toUserId = transaction.to._id.toString();
         const amount = transaction.amount;
         if (memberExpensesMap[fromUserId]) {
-          memberExpensesMap[fromUserId].paid += amount;
+          memberExpensesMap[fromUserId].owed += amount;
           memberExpensesMap[fromUserId].settlements.push({
             id: toUserId,
-            amount
-          });
+            amount: -amount
+          }); 
         }
         if (memberExpensesMap[toUserId]) {
-          memberExpensesMap[toUserId].owed += amount;
+          memberExpensesMap[toUserId].paid += amount;
         }
         //also add to memebers into the settlements
         if (memberExpensesMap[toUserId]) {

@@ -556,6 +556,11 @@ export const groupSettelment = async (req, res) => {
 
     transaction.minimizedTransactions = await transaction.minimizeTransaction(transaction.netBalances);
     await transaction.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Settlement recorded successfully"
+    });
   }
   catch (error) {
     console.error('Error creating group settlement:', error);

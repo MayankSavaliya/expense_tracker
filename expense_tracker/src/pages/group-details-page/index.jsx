@@ -110,7 +110,7 @@ const GroupDetailsPage = () => {
           categoryDistribution: balances.categoryDistribution || [],
           memberExpenses: balances.memberExpenses || []
         };
-
+        // console.log(balances);
         setGroupData(transformedData);
         setBalancesData(balances);
       } catch (err) {
