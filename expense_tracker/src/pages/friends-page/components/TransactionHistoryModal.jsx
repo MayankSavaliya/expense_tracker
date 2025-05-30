@@ -156,7 +156,7 @@ const TransactionHistoryModal = ({
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-800">Transactions with {friend.name}</h3>
-              <p className={`text-sm font-medium ${isUser1Debtor ? 'text-green-500' : 'text-red-500'}`}>
+              <p className={`text-sm font-medium ${!isUser1Debtor ? 'text-green-500' : 'text-red-500'}`}>
                 {isUser1Debtor 
                   ? `Owes you ${formatCurrency(balance)}` 
                   : `You owe ${formatCurrency(balance)}`}
@@ -209,7 +209,7 @@ const TransactionHistoryModal = ({
                     {date === "Unknown date" ? "Unknown date" : formatDate(date)}
                   </h5>
                   {dayTransactions.map((transaction) => {
-                    const isPayment = transaction.from._id === friend.id;
+                    const isPayment = transaction.from._id !== friend.id;
                     const isSettlement = transaction.description && 
                       transaction.description.toLowerCase().includes('settlement');
                     

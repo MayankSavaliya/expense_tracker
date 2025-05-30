@@ -265,8 +265,8 @@ transactionSchema.statics.getBalanceBetweenUsers = async function(user1Id, user2
       relevantTransactions.forEach(t => {
         // If user1 owes user2, add to balance
         if (t.from._id.toString() === user1Id && t.to._id.toString() === user2Id) {
-          netBalance += t.amount;
-          console.log(netBalance);
+          netBalance -= t.amount;
+          // console.log(netBalance);
           directTransactions.push({
             transactionId: transaction._id,
             ...t.toObject(),
@@ -277,7 +277,7 @@ transactionSchema.statics.getBalanceBetweenUsers = async function(user1Id, user2
         } 
         // If user2 owes user1, subtract from balance
         else if (t.from._id.toString() === user2Id && t.to._id.toString() === user1Id) {
-          netBalance -= t.amount;
+          netBalance += t.amount;
           directTransactions.push({
             transactionId: transaction._id,
             ...t.toObject(),

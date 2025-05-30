@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import { StatusCodes } from 'http-status-codes';
 import { ErrorResponse } from '../middleware/errorHandler.js';
 
+
 // @desc    Get transaction balances for current user or a group
 // @route   GET /api/transactions
 // @access  Private
@@ -480,42 +481,47 @@ export const createSettlement = async (req, res) => {
       if (remainingAmount <= 0) break; // No more amount to settle
 
       const transactionAmount = tr.amount;
+      
+      const transaction = await Transaction.findById(tr.transactionId);
       //now check if the touser to from user then direct remove that amount from the transaction
       if (tr.from._id.toString() === fromUserId && tr.to._id.toString() === toUserId) {
         // This is a transaction from fromUser to toUser
-        const requiredAmount = Math.min(remainingAmount, transactionAmount);
-        const transaction = await Transaction.findById(tr._id);
-
-        transaction.netBalances.forEach(balance => {
+        const requiredAmount = Math.min(remainingAmount, transactionAmount);        transaction.netBalances.forEach(balance => {
           if (balance.user._id.toString() === fromUserId) {
-            balance.balance += requiredAmount; // Remove from fromUser
+            balance.balance = parseFloat((balance.balance + requiredAmount).toFixed(2)); // Remove from fromUser
           }
           else if (balance.user._id.toString() === toUserId) {
-            balance.balance -= requiredAmount; // Add to toUser
+            balance.balance = parseFloat((balance.balance - requiredAmount).toFixed(2)); // Add to toUser
           }
-        });
-        await transaction.save();
+        });        await transaction.save();
         // Update remaining amount
         remainingAmount -= requiredAmount;
-        //call minimizeTransaction to update the minimized transactions
+        
+        // Clean up near-zero balances and recalculate minimized transactions
+        transaction.netBalances = transaction.netBalances.map(balance => ({
+          user: balance.user,
+          balance: parseFloat(balance.balance.toFixed(2))
+        })).filter(balance => Math.abs(balance.balance) >= 0.01);
+        
         transaction.minimizedTransactions = Transaction.minimizeTransactions(transaction.netBalances);
 
         await transaction.save();
       } else if (tr.from._id.toString() === toUserId && tr.to._id.toString() === fromUserId) {
-        // This is a transaction from toUser to fromUser direct settle this no need to check the balance
-        const transaction = await Transaction.findById(tr._id);
-
-        //Now add balance into the to and remove from the from
+        // This is a transaction from toUser to fromUser direct settle this no need to check the balance        //Now add balance into the to and remove from the from
         transaction.netBalances.forEach(balance => {
           if (balance.user._id.toString() === fromUserId) {
-            balance.balance -= remainingAmount; // Remove from fromUser
+            balance.balance = parseFloat((balance.balance - remainingAmount).toFixed(2)); // Remove from fromUser
           } else if (balance.user._id.toString() === toUserId) {
-            balance.balance += remainingAmount; // Add to toUser
+            balance.balance = parseFloat((balance.balance + remainingAmount).toFixed(2)); // Add to toUser
           }          
-        });
-
-        await transaction.save();
-        //call minimizeTransaction to update the minimized transactions
+        });        await transaction.save();
+        
+        // Clean up near-zero balances and recalculate minimized transactions
+        transaction.netBalances = transaction.netBalances.map(balance => ({
+          user: balance.user,
+          balance: parseFloat(balance.balance.toFixed(2))
+        })).filter(balance => Math.abs(balance.balance) >= 0.01);
+        
         transaction.minimizedTransactions = Transaction.minimizeTransactions(transaction.netBalances);
 
         await transaction.save();
@@ -544,16 +550,18 @@ export const groupSettelment = async (req, res) => {
         message: "Group ID is required" 
       });
     }
-    const transaction= await Transaction.findOne({ group: groupId });
-
-    transaction.netBalances.forEach(balance => {
+    const transaction= await Transaction.findOne({ group: groupId });    transaction.netBalances.forEach(balance => {
       if (balance.user._id.toString() === user._id.toString()) {
-        balance.balance += amount; // Remove from current user
+        balance.balance = parseFloat((balance.balance + amount).toFixed(2)); // Remove from current user
       } else if (balance.user._id.toString() === toUserId) {
-        balance.balance -= amount; // Add to the target user
+        balance.balance = parseFloat((balance.balance - amount).toFixed(2)); // Add to the target user
       }
-    });
-
+    });    // Clean up near-zero balances and recalculate minimized transactions
+    transaction.netBalances = transaction.netBalances.map(balance => ({
+      user: balance.user,
+      balance: parseFloat(balance.balance.toFixed(2))
+    })).filter(balance => Math.abs(balance.balance) >= 0.01);
+    
     transaction.minimizedTransactions = Transaction.minimizeTransactions(transaction.netBalances);
     await transaction.save();
 
