@@ -360,7 +360,6 @@ export const getGroupBalances = async (req, res, next) => {
       }
     });
 
-
   } catch (error) {
     next(error);
   }

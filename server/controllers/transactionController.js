@@ -498,7 +498,7 @@ export const createSettlement = async (req, res) => {
         // Update remaining amount
         remainingAmount -= requiredAmount;
         //call minimizeTransaction to update the minimized transactions
-        transaction.minimizedTransactions = await transaction.minimizeTransaction(transaction.netBalances);
+        transaction.minimizedTransactions = Transaction.minimizeTransactions(transaction.netBalances);
 
         await transaction.save();
       } else if (tr.from._id.toString() === toUserId && tr.to._id.toString() === fromUserId) {
@@ -516,7 +516,7 @@ export const createSettlement = async (req, res) => {
 
         await transaction.save();
         //call minimizeTransaction to update the minimized transactions
-        transaction.minimizedTransactions=await transaction.minimizeTransaction(transaction.netBalances);
+        transaction.minimizedTransactions = Transaction.minimizeTransactions(transaction.netBalances);
 
         await transaction.save();
       }
@@ -554,7 +554,7 @@ export const groupSettelment = async (req, res) => {
       }
     });
 
-    transaction.minimizedTransactions = await transaction.minimizeTransaction(transaction.netBalances);
+    transaction.minimizedTransactions = Transaction.minimizeTransactions(transaction.netBalances);
     await transaction.save();
 
     res.status(200).json({

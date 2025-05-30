@@ -9,6 +9,7 @@ import BalancesTab from "./components/BalancesTab";
 import ChartsTab from "./components/ChartsTab";
 import MembersTab from "./components/MembersTab";
 import GroupSettingsTab from "./components/GroupSettingsTab";
+import SettleUpModal from "./components/SettleUpModal";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -20,6 +21,7 @@ const GroupDetailsPage = () => {
   const [error, setError] = useState(null);
   const [groupData, setGroupData] = useState(null);
   const [balancesData, setBalancesData] = useState(null);
+  const [showSettleUpModal, setShowSettleUpModal] = useState(false);
   const { user, token } = useContext(AuthContext);
 
   useEffect(() => {
@@ -123,6 +125,71 @@ const GroupDetailsPage = () => {
 
     fetchGroupData();
   }, [groupId, user, token]);
+
+  // Handle settlement completion - refresh group data
+  const handleSettlementComplete = () => {
+    // Re-fetch group data to get updated balances
+    const fetchGroupData = async () => {
+      if (!groupId) return;
+
+      try {
+        const headers = {
+          Authorization: `Bearer ${token}`
+        };
+
+        // Fetch group details
+        const groupResponse = await axios.get(`${API_BASE_URL}/api/groups/${groupId}`, { headers });
+        const group = groupResponse.data.data;
+
+        // Fetch group balances
+        const balancesResponse = await axios.get(`${API_BASE_URL}/api/groups/${groupId}/balances`, { headers });
+        const balances = balancesResponse.data.data;
+
+        // Transform and set data (same as in main useEffect)
+        const transformedData = {
+          id: group._id,
+          name: group.name,
+          description: group.description,
+          icon: group.icon || "Users",
+          iconBg: group.iconBg || "bg-mint-500",
+          creator: group.creator,
+          members: group.members || [],
+          createdAt: new Date(group.createdAt).toLocaleDateString(),
+          yourBalance: balances.yourBalance || 0,
+          expenses: group.expenses?.map(expense => ({
+            id: expense._id,
+            description: expense.description,
+            amount: expense.amount,
+            date: new Date(expense.date).toLocaleDateString(),
+            paidBy: expense.paidBy?.map(payer => ({
+              user: payer.user,
+              amount: payer.amount
+            })) || [],
+            owedBy: expense.owedBy?.map(debtor => ({
+              user: debtor.user,
+              amount: debtor.amount
+            })) || [],
+            notes: expense.notes,
+            receiptImage: expense.receiptImage
+          })) || [],
+          balances: balances.balances?.map(balance => ({
+            from: balance.from,
+            to: balance.to,
+            amount: balance.amount
+          })) || [],
+          categoryDistribution: balances.categoryDistribution || [],
+          memberExpenses: balances.memberExpenses || []
+        };
+        
+        setGroupData(transformedData);
+        setBalancesData(balances);
+      } catch (err) {
+        console.error('Error refreshing group data:', err);
+      }
+    };
+
+    fetchGroupData();
+  };
 
   // Helper function to get category icon
   const getCategoryIcon = (category) => {
@@ -263,13 +330,13 @@ const GroupDetailsPage = () => {
           <Icon name="Plus" size={16} className="mr-2" />
           Add Expense
         </Link>
-        <Link 
-          to={`/settlements-page?groupId=${groupId}`}
+        <button
+          onClick={() => setShowSettleUpModal(true)}
           className="inline-flex items-center px-4 py-2 bg-lavender-500 text-white rounded-lg hover:bg-lavender-700 transition-all shadow-sm hover:shadow"
         >
           <Icon name="ArrowLeftRight" size={16} className="mr-2" />
           Settle Up
-        </Link>
+        </button>
       </div>
       
       {/* Tabs */}
@@ -315,6 +382,15 @@ const GroupDetailsPage = () => {
           {activeTab === "settings" && <GroupSettingsTab groupId={groupId} />}
         </div>
       </div>
+
+      {/* Settle Up Modal */}
+      <SettleUpModal
+        isOpen={showSettleUpModal}
+        onClose={() => setShowSettleUpModal(false)}
+        groupId={groupId}
+        balancesData={balancesData}
+        onSettlementComplete={handleSettlementComplete}
+      />
     </div>
   );
 };
