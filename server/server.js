@@ -11,6 +11,7 @@ import expenseRoutes from './routes/expenseRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
 import transactionRoutes from './routes/transactionRoutes.js';
 import friendRoutes from './routes/friendRoutes.js';
+import settlementRoutes from './routes/settlementRoutes.js';
 
 // Load env vars
 dotenv.config();
@@ -42,6 +43,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/friends', friendRoutes);
+app.use('/api/settlements', settlementRoutes);
 
 // Basic route
 app.get('/', (req, res) => {

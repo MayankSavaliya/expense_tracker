@@ -11,6 +11,11 @@ function Icon({
     ...props
 }) {
     const IconComponent = LucideIcons[name];
+    
+    // Debug log
+    if (!IconComponent) {
+        console.warn(`Icon "${name}" not found in lucide-react`);
+    }
 
     if (!IconComponent) {
         return <HelpCircle size={size} color="gray" strokeWidth={strokeWidth} className={className} {...props} />;

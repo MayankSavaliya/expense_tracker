@@ -3,11 +3,11 @@ import { Link } from "react-router-dom";
 import Icon from "../../../components/AppIcon";
 import Image from "../../../components/AppImage";
 
-const SettlementCard = ({ settlement, isSelected, onSelect, onSettle, formatCurrency }) => {
+const SettlementCard = ({ settlement, isSelected, onSelect, onSettle, formatCurrency, currentUserId }) => {
   const { payer, recipient, amount, group, simplification } = settlement;
   
   // Determine if current user is payer or recipient
-  const isUserPayer = payer.id === 1; // Assuming user ID is 1
+  const isUserPayer = payer.id === currentUserId;
   
   return (
     <div className={`border rounded-lg transition-all ${isSelected ? 'border-mint-500 bg-mint-500 bg-opacity-5' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -51,9 +51,11 @@ const SettlementCard = ({ settlement, isSelected, onSelect, onSettle, formatCurr
                         <><span className="font-medium text-gray-800">{payer.name}</span> owes you</>
                       )}
                     </p>
-                    <Link to={`/group-details-page?id=${group.id}`} className="text-xs text-mint-500 hover:text-mint-700">
-                      {group.name}
-                    </Link>
+                    {group && (
+                      <Link to={`/group-details-page?id=${group.id}`} className="text-xs text-mint-500 hover:text-mint-700">
+                        {group.name}
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>

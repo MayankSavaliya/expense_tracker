@@ -43,6 +43,8 @@ export const transactionAPI = {
   getTransactionById: (id) => api.get(`/api/transactions/${id}`),
   getBalanceBetweenUsers: (userId1, userId2) => api.get(`/api/transactions/debts/between/${userId1}/${userId2}`),
   createSettlement: (data) => api.post('/api/transactions/settlement', data),
+  createGroupSettlement: (data) => api.post('/api/transactions/settlement/group', data),
+  getSettlementSuggestions: (userId) => api.get(`/api/transactions/settlement-suggestions?userId=${userId}`),
 };
 
 // Expense related API calls
@@ -102,6 +104,21 @@ export const friendAPI = {
   
   // Search users (potential friends)
   searchUsers: (query) => api.get(`/api/users/search?query=${query}`),
+};
+
+// Settlement related API calls
+export const settlementAPI = {
+  // Get all settlements for current user
+  getAllSettlements: () => api.get('/api/settlements'),
+  
+  // Get settlements for specific user
+  getUserSettlements: (userId) => api.get(`/api/settlements/user/${userId}`),
+  
+  // Get settlements for specific group
+  getGroupSettlements: (groupId) => api.get(`/api/settlements/group/${groupId}`),
+  
+  // Get single settlement by ID
+  getSettlementById: (id) => api.get(`/api/settlements/${id}`),
 };
 
 export default api;

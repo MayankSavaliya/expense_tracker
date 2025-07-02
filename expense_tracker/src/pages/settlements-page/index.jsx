@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { transactionAPI, settlementAPI } from "../../services/api";
 
 import Icon from "../../components/AppIcon";
 
@@ -8,173 +10,118 @@ import SettlementMethodModal from "./components/SettlementMethodModal";
 import FilterBar from "./components/FilterBar";
 
 const SettlementsPage = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("suggested");
   const [selectedSettlements, setSelectedSettlements] = useState([]);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [currentSettlement, setCurrentSettlement] = useState(null);
   const [filterGroup, setFilterGroup] = useState("all");
   const [dateRange, setDateRange] = useState({ start: null, end: null });
+  const [suggestedSettlements, setSuggestedSettlements] = useState([]);
+  const [settlementHistory, setSettlementHistory] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshHistory, setRefreshHistory] = useState(0); // Trigger for refreshing history
 
-  // Mock data for suggested settlements
-  const suggestedSettlements = [
-    {
-      id: 1,
-      payer: {
-        id: 1,
-        name: "John Smith",
-        avatar: "https://randomuser.me/api/portraits/men/32.jpg"
-      },
-      recipient: {
-        id: 2,
-        name: "Emily Johnson",
-        avatar: "https://randomuser.me/api/portraits/women/44.jpg"
-      },
-      amount: 125.75,
-      group: {
-        id: 1,
-        name: "Roommates"
-      },
-      simplification: "This payment will clear 3 separate debts",
-      date: new Date()
-    },
-    {
-      id: 2,
-      payer: {
-        id: 1,
-        name: "John Smith",
-        avatar: "https://randomuser.me/api/portraits/men/32.jpg"
-      },
-      recipient: {
-        id: 4,
-        name: "Sarah Wilson",
-        avatar: "https://randomuser.me/api/portraits/women/63.jpg"
-      },
-      amount: 85.50,
-      group: {
-        id: 2,
-        name: "Weekend Trip"
-      },
-      simplification: "This payment will clear your debt to Sarah",
-      date: new Date()
-    },
-    {
-      id: 3,
-      payer: {
-        id: 5,
-        name: "David Lee",
-        avatar: "https://randomuser.me/api/portraits/men/86.jpg"
-      },
-      recipient: {
-        id: 1,
-        name: "John Smith",
-        avatar: "https://randomuser.me/api/portraits/men/32.jpg"
-      },
-      amount: 45.00,
-      group: {
-        id: 1,
-        name: "Roommates"
-      },
-      simplification: "You\'ll receive this payment from David",
-      date: new Date()
-    }
-  ];
+  // Fetch settlement suggestions from backend
+  useEffect(() => {
+    const fetchSettlementSuggestions = async () => {
+      if (!user?._id) return;
+      
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const response = await transactionAPI.getSettlementSuggestions(user._id);
+        
+        if (response.data.success) {
+          // Transform the data to match our component structure
+          const transformedSuggestions = response.data.data.suggestions.map(suggestion => ({
+            id: suggestion.id,
+            transactionId: suggestion.transactionId,
+            payer: {
+              id: suggestion.from.id,
+              name: suggestion.from.name,
+              avatar: suggestion.from.avatar || `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 99)}.jpg`
+            },
+            recipient: {
+              id: suggestion.to.id,
+              name: suggestion.to.name,
+              avatar: suggestion.to.avatar || `https://randomuser.me/api/portraits/women/${Math.floor(Math.random() * 99)}.jpg`
+            },
+            amount: suggestion.amount,
+            type: suggestion.type,
+            group: suggestion.groupId ? {
+              id: suggestion.groupId,
+              name: suggestion.groupName,
+              avatar: suggestion.groupAvatar
+            } : null,
+            simplification: suggestion.description,
+            date: new Date()
+          }));
+          
+          setSuggestedSettlements(transformedSuggestions);
+        }
+      } catch (error) {
+        console.error('Error fetching settlement suggestions:', error);
+        setError('Failed to load settlement suggestions. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  // Mock data for settlement history
-  const settlementHistory = [
-    {
-      id: 101,
-      payer: {
-        id: 1,
-        name: "John Smith",
-        avatar: "https://randomuser.me/api/portraits/men/32.jpg"
-      },
-      recipient: {
-        id: 3,
-        name: "Michael Brown",
-        avatar: "https://randomuser.me/api/portraits/men/59.jpg"
-      },
-      amount: 450.00,
-      group: {
-        id: 1,
-        name: "Roommates"
-      },
-      status: "completed",
-      method: "Bank Transfer",
-      date: new Date(Date.now() - 86400000), // Yesterday
-      notes: "Rent payment for May"
-    },
-    {
-      id: 102,
-      payer: {
-        id: 6,
-        name: "Jessica Taylor",
-        avatar: "https://randomuser.me/api/portraits/women/29.jpg"
-      },
-      recipient: {
-        id: 1,
-        name: "John Smith",
-        avatar: "https://randomuser.me/api/portraits/men/32.jpg"
-      },
-      amount: 95.30,
-      group: {
-        id: 2,
-        name: "Weekend Trip"
-      },
-      status: "completed",
-      method: "Cash",
-      date: new Date(Date.now() - 172800000), // 2 days ago
-      notes: "Hotel expenses"
-    },
-    {
-      id: 103,
-      payer: {
-        id: 1,
-        name: "John Smith",
-        avatar: "https://randomuser.me/api/portraits/men/32.jpg"
-      },
-      recipient: {
-        id: 4,
-        name: "Sarah Wilson",
-        avatar: "https://randomuser.me/api/portraits/women/63.jpg"
-      },
-      amount: 35.25,
-      group: {
-        id: 2,
-        name: "Weekend Trip"
-      },
-      status: "pending",
-      method: "UPI",
-      date: new Date(Date.now() - 259200000), // 3 days ago
-      notes: "Dinner at restaurant"
-    },
-    {
-      id: 104,
-      payer: {
-        id: 5,
-        name: "David Lee",
-        avatar: "https://randomuser.me/api/portraits/men/86.jpg"
-      },
-      recipient: {
-        id: 1,
-        name: "John Smith",
-        avatar: "https://randomuser.me/api/portraits/men/32.jpg"
-      },
-      amount: 120.00,
-      group: {
-        id: 3,
-        name: "Lunch Club"
-      },
-      status: "revoked",
-      method: "Google Pay",
-      date: new Date(Date.now() - 432000000), // 5 days ago
-      notes: "Payment revoked due to error"
-    }
-  ];
+    fetchSettlementSuggestions();
+  }, [user?._id]);
+
+  // Fetch settlement history from backend
+  useEffect(() => {
+    const fetchSettlementHistory = async () => {
+      if (!user?._id) return;
+      
+      try {
+        const response = await settlementAPI.getAllSettlements();
+        
+        if (response.data && response.data.success && response.data.data) {
+          // Transform the settlement data to match our component structure
+          const transformedHistory = response.data.data.map(settlement => ({
+            id: settlement._id,
+            payer: {
+              id: settlement.fromUser._id,
+              name: settlement.fromUser.name,
+              avatar: settlement.fromUser.avatar || `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 99)}.jpg`
+            },
+            recipient: {
+              id: settlement.toUser._id,
+              name: settlement.toUser.name,
+              avatar: settlement.toUser.avatar || `https://randomuser.me/api/portraits/women/${Math.floor(Math.random() * 99)}.jpg`
+            },
+            amount: settlement.amount,
+            group: settlement.group ? {
+              id: settlement.group._id,
+              name: settlement.group.name
+            } : null,
+            status: "completed", // All settlements in the database are completed
+            method: settlement.method || "cash",
+            date: new Date(settlement.createdAt),
+            notes: settlement.notes || settlement.description
+          }));
+          
+          setSettlementHistory(transformedHistory);
+        }
+      } catch (error) {
+        console.error('Error fetching settlement history:', error);
+        // If error, keep using empty array - don't show error to user for history
+        setSettlementHistory([]);
+      }
+    };
+
+    fetchSettlementHistory();
+  }, [user?._id, refreshHistory]); // Refresh when user changes or after new settlement
 
   // Filter settlements based on selected group
   const filteredHistory = settlementHistory.filter(settlement => {
     if (filterGroup === "all") return true;
-    return settlement.group.id.toString() === filterGroup;
+    return settlement.group?.id?.toString() === filterGroup;
   });
 
   // Handle settlement selection
@@ -205,6 +152,78 @@ const SettlementsPage = () => {
     setShowSettlementModal(true);
   };
 
+  // Handle settlement confirmation
+  const handleSettlementConfirm = async (settlementData) => {
+    try {
+      if (currentSettlement.type === 'group') {
+        // Group settlement
+        await transactionAPI.createGroupSettlement({
+          groupId: currentSettlement.group.id,
+          toUserId: currentSettlement.recipient.id,
+          amount: currentSettlement.amount,
+          method: settlementData.method,
+          notes: settlementData.notes || ''
+        });
+      } else {
+        // Personal settlement
+        await transactionAPI.createSettlement({
+          fromUserId: currentSettlement.payer.id,
+          toUserId: currentSettlement.recipient.id,
+          amount: currentSettlement.amount,
+          method: settlementData.method,
+          notes: settlementData.notes || ''
+        });
+      }
+
+      // Remove the settled item from suggestions
+      setSuggestedSettlements(prev => prev.filter(s => s.id !== currentSettlement.id));
+      setSelectedSettlements(prev => prev.filter(id => id !== currentSettlement.id));
+      
+      // Show success message
+      alert(`Successfully settled with ${currentSettlement.recipient.id === user._id ? currentSettlement.payer.name : currentSettlement.recipient.name}!`);
+      
+      // Close modal
+      setShowSettlementModal(false);
+      setCurrentSettlement(null);
+      
+      // Trigger refresh of settlement history
+      setRefreshHistory(prev => prev + 1);
+      
+      // Refresh suggestions
+      const response = await transactionAPI.getSettlementSuggestions(user._id);
+      if (response.data.success) {
+        const transformedSuggestions = response.data.data.suggestions.map(suggestion => ({
+          id: suggestion.id,
+          transactionId: suggestion.transactionId,
+          payer: {
+            id: suggestion.from.id,
+            name: suggestion.from.name,
+            avatar: suggestion.from.avatar || `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 99)}.jpg`
+          },
+          recipient: {
+            id: suggestion.to.id,
+            name: suggestion.to.name,
+            avatar: suggestion.to.avatar || `https://randomuser.me/api/portraits/women/${Math.floor(Math.random() * 99)}.jpg`
+          },
+          amount: suggestion.amount,
+          type: suggestion.type,
+          group: suggestion.groupId ? {
+            id: suggestion.groupId,
+            name: suggestion.groupName,
+            avatar: suggestion.groupAvatar
+          } : null,
+          simplification: suggestion.description,
+          date: new Date()
+        }));
+        
+        setSuggestedSettlements(transformedSuggestions);
+      }
+    } catch (error) {
+      console.error('Error creating settlement:', error);
+      alert('Failed to create settlement. Please try again.');
+    }
+  };
+
   // Format currency
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
@@ -215,9 +234,11 @@ const SettlementsPage = () => {
 
   // Calculate total amount to settle
   const totalToSettle = suggestedSettlements.reduce((sum, settlement) => {
-    if (settlement.recipient.id === 1) {
+    if (!user?._id) return sum;
+    
+    if (settlement.recipient.id === user._id) {
       return sum + settlement.amount;
-    } else if (settlement.payer.id === 1) {
+    } else if (settlement.payer.id === user._id) {
       return sum - settlement.amount;
     }
     return sum;
@@ -316,8 +337,30 @@ const SettlementsPage = () => {
                 </div>
               )}
 
-              {/* Suggested Settlements List */}
-              {suggestedSettlements.length > 0 ? (
+              {/* Loading State */}
+              {isLoading ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Icon name="Loader" size={24} className="text-gray-400 animate-spin" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-800 mb-2">Loading Settlements...</h3>
+                  <p className="text-gray-600">Please wait while we fetch your settlement suggestions.</p>
+                </div>
+              ) : error ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Icon name="AlertTriangle" size={24} className="text-red-500" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-800 mb-2">Error Loading Settlements</h3>
+                  <p className="text-gray-600 mb-4">{error}</p>
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="bg-mint-500 hover:bg-mint-700 text-white py-2 px-4 rounded-md text-sm transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : suggestedSettlements.length > 0 ? (
                 <div className="space-y-4">
                   {suggestedSettlements.map((settlement) => (
                     <SettlementCard 
@@ -327,6 +370,7 @@ const SettlementsPage = () => {
                       onSelect={() => toggleSettlementSelection(settlement.id)}
                       onSettle={() => handleSettleClick(settlement)}
                       formatCurrency={formatCurrency}
+                      currentUserId={user?._id}
                     />
                   ))}
                 </div>
@@ -352,6 +396,7 @@ const SettlementsPage = () => {
                       key={settlement.id}
                       settlement={settlement}
                       formatCurrency={formatCurrency}
+                      currentUserId={user?._id}
                     />
                   ))}
                 </div>
@@ -379,7 +424,9 @@ const SettlementsPage = () => {
             setShowSettlementModal(false);
             setCurrentSettlement(null);
           }}
+          onConfirm={handleSettlementConfirm}
           formatCurrency={formatCurrency}
+          currentUserId={user?._id}
         />
       )}
     </div>

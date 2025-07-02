@@ -9,7 +9,8 @@ import {
   getBalanceBetweenUsers,
   getGroupDebts,
   createSettlement,
-  groupSettelment
+  groupSettelment,
+  getSettlementSuggestions
 } from '../controllers/transactionController.js';
 
 const router = express.Router();
@@ -25,6 +26,7 @@ router.get('/debts/group/:groupId', getGroupDebts);
 // Settlement routes
 router.post('/settlement', createSettlement);  //personal settlement between two users
 router.post('/settlement/group', groupSettelment);  //group settlement between users in a group
+router.get('/settlement-suggestions', getSettlementSuggestions);  //get settlement suggestions
 
 // Specific routes first
 router.get('/summary', getBalanceSummary); //needs some modification to return the summary of all transactions

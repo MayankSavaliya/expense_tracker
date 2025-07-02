@@ -197,9 +197,9 @@ const RecentActivity = () => {
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-gray-800 text-lg">{formatCurrency(activity.amount)}</p>
-                    {activity.type === "expense" && activity.yourShare > 0 && (
+                    {activity.type === "expense" && (
                       <p className="text-sm font-medium px-2.5 py-1 bg-gray-100 rounded-full inline-block mt-1.5">
-                        Your share: {formatCurrency(activity.yourShare)}
+                        Your share: {formatCurrency(activity.yourShare || 0)}
                       </p>
                     )}
                   </div>

@@ -2,15 +2,16 @@ import React, { useState } from "react";
 import Icon from "../../../components/AppIcon";
 import Image from "../../../components/AppImage";
 
-const SettlementMethodModal = ({ settlement, onClose, formatCurrency }) => {
+const SettlementMethodModal = ({ settlement, onClose, onConfirm, formatCurrency, currentUserId }) => {
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [notes, setNotes] = useState("");
   
   const { payer, recipient, amount, group } = settlement;
   
   // Determine if current user is payer or recipient
-  const isUserPayer = payer.id === 1; // Assuming user ID is 1
+  const isUserPayer = payer.id === currentUserId;
   
   const paymentMethods = [
     { id: 'cash', name: 'Cash', icon: 'Banknote', description: 'Record a cash payment' },
@@ -23,21 +24,29 @@ const SettlementMethodModal = ({ settlement, onClose, formatCurrency }) => {
     setSelectedMethod(methodId);
   };
   
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedMethod) return;
     
     setIsProcessing(true);
     
-    // Simulate processing
-    setTimeout(() => {
-      setIsProcessing(false);
+    try {
+      // Call the confirm callback with settlement data
+      await onConfirm({
+        method: selectedMethod,
+        notes: notes
+      });
+      
       setIsCompleted(true);
       
       // Close modal after showing success
       setTimeout(() => {
         onClose();
       }, 2000);
-    }, 1500);
+    } catch (error) {
+      console.error('Error processing settlement:', error);
+      setIsProcessing(false);
+      alert('Failed to process settlement. Please try again.');
+    }
   };
   
   return (
@@ -83,9 +92,11 @@ const SettlementMethodModal = ({ settlement, onClose, formatCurrency }) => {
                   <p className="text-2xl font-semibold text-gray-800">
                     {formatCurrency(amount)}
                   </p>
-                  <p className="text-sm text-gray-500">
-                    {group.name}
-                  </p>
+                  {group && (
+                    <p className="text-sm text-gray-500">
+                      {group.name}
+                    </p>
+                  )}
                 </div>
               </div>
               
@@ -128,6 +139,19 @@ const SettlementMethodModal = ({ settlement, onClose, formatCurrency }) => {
                     </div>
                   ))}
                 </div>
+              </div>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes (optional)
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-mint-500 focus:border-mint-500"
+                  rows="3"
+                  placeholder="Add any notes about this settlement..."
+                />
               </div>
               
               <div className="flex justify-end">
